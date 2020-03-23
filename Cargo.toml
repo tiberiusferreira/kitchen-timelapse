@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+    "camera_api",
+    "camera_api_consumer",
+]
