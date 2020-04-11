@@ -7,5 +7,9 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ws = "*"
 rocket = {version = "0.4.2", default-features = false}
+log = "0.4.8"
+flexi_logger = "0.15.1"
+chrono = "0.4.11"
+rocket_seek_stream = {git="https://github.com/rydz/rocket_seek_stream"}
+crossbeam-channel = "0.4.2"
