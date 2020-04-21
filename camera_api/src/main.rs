@@ -2,22 +2,12 @@
 //ffmpeg -framerate 10 -i image7_%04d.jpg -video_size 1640:1232 -c:v h264_omx -bufsize 64k -b:v 1.2M -vf fps=10 out.mp4
 #![feature(decl_macro)]
 #![feature(proc_macro_hygiene)]
-#[macro_use]
 extern crate rocket;
 
 mod camera_api;
 
-use log::error;
-use rocket::State;
-use std::fs;
-use std::fs::File;
-use std::io::Read;
-use std::process::Command;
-use std::thread::sleep;
-use std::time::Duration;
 
 mod timelapse;
-use rocket_seek_stream::SeekStream;
 
 // #[get("/stream")]
 // fn stream<'a>() -> std::io::Result<SeekStream<'a>> {

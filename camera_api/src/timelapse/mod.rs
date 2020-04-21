@@ -1,13 +1,12 @@
-use super::camera_api;
 use crate::camera_api::Camera;
 use chrono::prelude::*;
-use crossbeam_channel::{bounded, Receiver, TryRecvError};
+use crossbeam_channel::{Receiver};
+use log::error;
 use std::fs;
+use std::io::Write;
+use std::process::{Command, Stdio};
 use std::thread::JoinHandle;
 use std::time::Duration;
-use std::io::Write;
-use std::process::Command;
-
 mod encoder;
 
 const PICS_FOLDER_ROOT: &str = "/mnt/skynet/pics";
@@ -18,8 +17,8 @@ pub enum PicTakingMessage {
     Done,
 }
 
-struct EncodingOutput{
-    output_path: String,
+pub struct EncodingOutput {
+    output_path_with_filename: String,
     filename: String,
 }
 pub enum EncodingMessage {
@@ -28,7 +27,7 @@ pub enum EncodingMessage {
 pub struct TimeLapseManufacturer {
     camera: Camera,
     curr_tmp_pic_recording_folder: PicsFolders,
-    picture_taking_thread: Option<Receiver<PicTakingMessage>>,
+    picture_taking_thread: Option<(chrono::DateTime<Utc>, Receiver<PicTakingMessage>)>,
     encoding_thread: Option<Receiver<EncodingMessage>>,
 }
 
@@ -52,6 +51,17 @@ impl PicsFolders {
         self.create_folder();
     }
 
+    pub fn get_other_one(&self) -> PicsFolders{
+        return match &self {
+            PicsFolders::A => {
+                PicsFolders::B
+            }
+            PicsFolders::B => {
+                PicsFolders::A
+            }
+        };
+    }
+
     pub fn create_folder(&self) {
         fs::create_dir_all(self.path()).expect(&format!(
             "Error creating pic folder in path: {}",
@@ -59,14 +69,14 @@ impl PicsFolders {
         ));
     }
 
-    pub fn switch_folders(&mut self){
-        match self{
+    pub fn switch_folders(&mut self) {
+        match self {
             PicsFolders::A => {
                 *self = PicsFolders::B;
-            },
+            }
             PicsFolders::B => {
                 *self = PicsFolders::A;
-            },
+            }
         };
     }
 }
@@ -81,7 +91,10 @@ impl ToString for PicsFolders {
 
 #[derive(Debug)]
 struct Movie {
+    /// this should be a number which is the timestamp of when this movie started recording
+    /// with the .mp4 extension
     filename: String,
+    /// this should be a number which is the timestamp of when this movie started recording
     timestamp: i64,
     datetime: NaiveDateTime,
     path: String,
@@ -89,14 +102,19 @@ struct Movie {
 
 #[derive(Debug)]
 pub struct TodayFolder {
+    /// this timestamp stores which which day this folder is from
     timestamp: i64,
+    /// this datetime stores which which day this folder is from
     datetime: NaiveDateTime,
     today_movies: Vec<Movie>,
     path: String,
 }
+
 #[derive(Debug)]
 pub struct DirStructure {
+    /// Movies of the last days, the scope of a single movie is a whole day of the week
     movies: Vec<Movie>,
+    /// folder storing short movies, each movie scope is a single hour of the day
     today_folder: Option<TodayFolder>,
 }
 
@@ -106,7 +124,7 @@ impl TimeLapseManufacturer {
             movies: vec![],
             today_folder: None,
         };
-        if fs::read_dir(MOVIES_FOLDER_ROOT).is_err(){
+        if fs::read_dir(MOVIES_FOLDER_ROOT).is_err() {
             fs::create_dir_all(MOVIES_FOLDER_ROOT).unwrap();
         }
         let dir = fs::read_dir(MOVIES_FOLDER_ROOT).expect("Error movies folder dir");
@@ -175,12 +193,11 @@ impl TimeLapseManufacturer {
             camera: Camera::new(),
             curr_tmp_pic_recording_folder: PicsFolders::A,
             picture_taking_thread: None,
-            encoding_thread: None
+            encoding_thread: None,
         }
     }
 
     fn clear_pics_folder() {
-        use std::fs;
         if fs::read_dir(PICS_FOLDER_ROOT).is_ok() {
             fs::remove_dir_all(PICS_FOLDER_ROOT).expect("Error removing PICS folder");
         }
@@ -189,80 +206,112 @@ impl TimeLapseManufacturer {
     }
 
 
-    fn maybe_stitch_today_videos(&mut self){
-        // check if "today" has ended and we have to stitch it into a single video
-        let dir_structure = Self::get_dir_structure();
-        if let Some(today_folder)  = dir_structure.today_folder{
-            if today_folder.datetime.num_days_from_ce() != chrono::Utc::now().naive_utc().num_days_from_ce(){
-                // today has ended
-                unimplemented!()
+    pub fn encode_last_hour_and_move_to_today_folder(&mut self) {
+        // start encoding the pics just taken
+        let encoded_movie_filename = format!("{}.mp4", chrono::Utc::now().timestamp());
+        let tmp_output_dir = format!("{}/{}", ENCODING_FOLDER, "today");
+        if fs::read_dir(&tmp_output_dir).is_err() {
+            fs::create_dir_all(&tmp_output_dir).unwrap();
+        }
+
+        self.start_encoding_thread(
+            format!("{}", self.curr_tmp_pic_recording_folder.get_other_one().path()),
+            format!("{}/{}", tmp_output_dir, encoded_movie_filename),
+            encoded_movie_filename.to_string(),
+        );
+
+        // wait encoding to be over and get output path
+        let encoding_output = match self
+            .encoding_thread
+            .as_mut()
+            .expect("Encoding thread panicked!")
+            .recv()
+            .expect("Encoding thread did not send done MSG!")
+        {
+            EncodingMessage::Done(output_path) => output_path,
+        };
+
+        // check if we already a "today" folder, if not create one
+        if Self::get_dir_structure().today_folder.is_none() {
+            let today_folder_path =
+                format!("{}/{}", MOVIES_FOLDER_ROOT, chrono::Utc::now().timestamp());
+            fs::create_dir_all(&today_folder_path)
+                .expect(&format!("Error creating {}", today_folder_path));
+        }
+
+        let today_folder = Self::get_dir_structure().today_folder;
+        let today_folder = today_folder.expect("Error creating today folder");
+        let dest_path_with_filename = format!("{}/{}", today_folder.path, encoding_output.filename);
+
+        // move the encoded movie into today folder
+        fs::rename(
+            &encoding_output.output_path_with_filename,
+            &dest_path_with_filename,
+        )
+        .expect(&format!(
+            "Error moving {} to {}",
+            encoding_output.output_path_with_filename, dest_path_with_filename
+        ));
+    }
+
+    pub fn start_taking_pictures(&mut self, debugging: bool) {
+        self.curr_tmp_pic_recording_folder.reset_folder();
+        self.start_take_pictures_till_hour_end_thread(debugging);
+    }
+
+    pub fn wait_taking_pictures(&mut self) {
+        // wait for pic taking thread to be done
+        let _message = self
+            .picture_taking_thread
+            .as_mut()
+            .expect("There was no pic taking thread receiver after taking pics")
+            .1
+            .recv()
+            .expect("Pic taking thread did not send any msg");
+        self.picture_taking_thread = None;
+    }
+
+    /// Start pic taking at current folder
+    /// Wait Pic taking done
+    /// When done switch folder and restart
+    /// start encoding to TMP folder, wait for it, move from TMP to today folder
+    /// check need stitching, if so do it and wait for it
+    /// wait pic taking done, switch folder
+    pub fn run(&mut self) {
+        // Starting Pic taking
+        println!("{:?}", Self::get_dir_structure());
+
+        loop {
+            let start_pic_day = match &self.picture_taking_thread {
+                None => {
+                    self.start_taking_pictures(false);
+                    chrono::Utc::now().day()
+                }
+                Some(t) => t.0.day(),
+            };
+            self.wait_taking_pictures();
+            self.curr_tmp_pic_recording_folder.switch_folders();
+
+            self.start_taking_pictures(false);
+
+            self.encode_last_hour_and_move_to_today_folder();
+            let curr_pic_taking_day = self
+                .picture_taking_thread
+                .as_ref()
+                .expect("Pic taking thread failed to start")
+                .0
+                .day();
+            if start_pic_day != curr_pic_taking_day {
+                // new day, stitch last day and move it to own folder
+                self.stitch();
             }
         }
     }
 
-    pub fn run(&mut self) {
-
-        println!("{:?}", Self::get_dir_structure());
-
-
-        self.curr_tmp_pic_recording_folder.reset_folder();
-        self.start_take_pictures_till_hour_end_thread();
-
-        // wait for pic taking thread to be done
-        let _message = self.picture_taking_thread.as_mut().unwrap().recv().unwrap();
-        self.picture_taking_thread = None;
-
-        // start encoding the pics just taken
-        let filename = format!("{}.mp4", chrono::Utc::now().timestamp());
-        let tmp_output_dir = format!("{}/{}", ENCODING_FOLDER, "today");
-        if fs::read_dir(&tmp_output_dir).is_err(){
-            fs::create_dir_all(tmp_output_dir).unwrap();
-        }
-        self.start_encoding_thread(
-            format!("{}", self.curr_tmp_pic_recording_folder.path()),
-            format!(
-                "{}/today/{}",
-                ENCODING_FOLDER,
-                filename
-            ),
-            filename.to_string()
-        );
-
-        // switch pics folder
-        self.curr_tmp_pic_recording_folder.switch_folders();
-
-        // wait encoding to be over and get output path
-        let encoding_output = match self.encoding_thread.as_mut().unwrap().recv().unwrap(){
-            EncodingMessage::Done(output_path) => {
-                output_path
-            },
-        };
-
-        // check if we already a "today" folder, if not create one
-        if Self::get_dir_structure().today_folder.is_none(){
-            let today_folder_path = format!("{}/{}", MOVIES_FOLDER_ROOT, chrono::Utc::now().timestamp());
-            fs::create_dir_all(&today_folder_path).expect(&format!("Error creating {}", today_folder_path));
-        }
-        let today_folder = Self::get_dir_structure().today_folder;
-        assert!(today_folder.is_some(), "Error creating today folder");
-        let today_folder = today_folder.unwrap();
-        let dest = format!("{}/{}", today_folder.path, encoding_output.filename);
-
-        // move the encoded movie into today folder
-        fs::rename(&encoding_output.output_path, &dest)
-            .expect(&format!("Error moving {} to {}", encoding_output.output_path, dest));
-
-        self.stitch();
-        // check if we need to stitch
-
-
-    }
-
-    fn stitch(&mut self){
+    fn stitch(&mut self) {
         let mut files_string = String::new();
         let structure = Self::get_dir_structure();
         if let Some(folder) = structure.today_folder {
-
             for movie in folder.today_movies {
                 files_string.push_str(&format!("file \'{}\'\n", movie.path));
             }
@@ -271,7 +320,8 @@ impl TimeLapseManufacturer {
             file.write_all(files_string.as_bytes()).unwrap();
             // ffmpeg -f concat -safe 0 -i files.txt -c copy some.mp4
             let out_path = format!("{}/{}.mp4", ENCODING_FOLDER, folder.timestamp);
-            let mut process = Command::new("ffmpeg")
+            let process = Command::new("ffmpeg")
+                .stdout(Stdio::piped())
                 .arg("-f")
                 .arg("concat")
                 .arg("-safe")
@@ -283,18 +333,27 @@ impl TimeLapseManufacturer {
                 .arg(&out_path)
                 .spawn()
                 .expect("command failed to start");
-            process.wait().unwrap();
+            let output = process
+                .wait_with_output()
+                .expect("Error waiting stitching process to end");
+            if !output.status.success() {
+                let err = String::from_utf8_lossy(&output.stderr);
+                let out = String::from_utf8_lossy(&output.stdout);
+                error!("Stitching process did not end successfully");
+                error!("{}", err);
+                error!("{}", out);
+            }
             fs::remove_dir_all(&folder.path).expect("Error removing today folder");
-            fs::rename(&out_path, format!("{}.mp4", &folder.path)).expect(&format!("Error moving {} to {}",out_path, folder.path));
+            fs::rename(&out_path, format!("{}.mp4", &folder.path))
+                .expect(&format!("Error moving {} to {}", out_path, folder.path));
         }
-
     }
 
-    fn start_take_pictures_till_hour_end_thread(&mut self) -> JoinHandle<()> {
+    fn start_take_pictures_till_hour_end_thread(&mut self, debugging: bool) -> JoinHandle<()> {
         let camera_process = self.camera.clone();
         let recording_folder = self.curr_tmp_pic_recording_folder.clone();
         let (sender, receiver) = crossbeam_channel::bounded::<PicTakingMessage>(2);
-        self.picture_taking_thread = Some(receiver);
+        self.picture_taking_thread = Some((chrono::Utc::now(), receiver));
         std::thread::spawn(move || {
             let local: DateTime<Local> = Local::now();
             let initial_hour = local.hour();
@@ -308,10 +367,12 @@ impl TimeLapseManufacturer {
                 );
                 camera_process.take_new_pic_save_at(&path);
                 i += 1;
-                std::thread::sleep(Duration::from_secs_f32(0.5));
+                // std::thread::sleep(Duration::from_secs_f32(0.5));
 
-                if i == 20 {
-                    break;
+                if debugging {
+                    if i == 20 {
+                        break;
+                    }
                 }
             }
             sender.send(PicTakingMessage::Done).unwrap();

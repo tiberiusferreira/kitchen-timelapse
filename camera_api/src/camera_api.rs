@@ -18,7 +18,7 @@ impl Camera {
             process_id: Self::start_raspistill_process(),
         };
         // wait camera process startup
-        std::thread::sleep(Duration::from_secs(1));
+        std::thread::sleep(Duration::from_secs(10));
         new_camera
     }
 
@@ -36,6 +36,7 @@ impl Camera {
             error!("Process did not finish successfully.");
             panic!();
         }
+        std::thread::sleep(Duration::from_millis(500));
         let curr_latest = fs::read(TMP_FILE).unwrap();
         curr_latest
     }
@@ -69,6 +70,9 @@ impl Camera {
             // .arg("-a") // a
             // .arg("4")
             .arg("-a") // annotate day/month/year hour
+            .arg("8") // annotate day/month/year hour
+            .arg("-a") // annotate day/month/year hour
+            // .arg("%d")
             .arg("%d-%m-%Y %X")
             .arg("-o") // output to
             .arg(TMP_FILE)
