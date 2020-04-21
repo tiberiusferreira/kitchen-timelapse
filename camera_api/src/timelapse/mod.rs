@@ -1,12 +1,11 @@
 use crate::camera_api::Camera;
 use chrono::prelude::*;
 use crossbeam_channel::{Receiver};
-use log::error;
+use log::{error, info};
 use std::fs;
 use std::io::Write;
 use std::process::{Command, Stdio};
 use std::thread::JoinHandle;
-use std::time::Duration;
 mod encoder;
 
 const PICS_FOLDER_ROOT: &str = "/mnt/skynet/pics";
@@ -27,7 +26,7 @@ pub enum EncodingMessage {
 pub struct TimeLapseManufacturer {
     camera: Camera,
     curr_tmp_pic_recording_folder: PicsFolders,
-    picture_taking_thread: Option<(chrono::DateTime<Utc>, Receiver<PicTakingMessage>)>,
+    picture_taking_thread: Option<(chrono::DateTime<Local>, Receiver<PicTakingMessage>)>,
     encoding_thread: Option<Receiver<EncodingMessage>>,
 }
 
@@ -208,9 +207,10 @@ impl TimeLapseManufacturer {
 
     pub fn encode_last_hour_and_move_to_today_folder(&mut self) {
         // start encoding the pics just taken
-        let encoded_movie_filename = format!("{}.mp4", chrono::Utc::now().timestamp());
+        let encoded_movie_filename = format!("{}.mp4", chrono::Local::now().timestamp());
         let tmp_output_dir = format!("{}/{}", ENCODING_FOLDER, "today");
         if fs::read_dir(&tmp_output_dir).is_err() {
+            info!("Creating new today folder at: {}", &tmp_output_dir);
             fs::create_dir_all(&tmp_output_dir).unwrap();
         }
 
@@ -234,7 +234,7 @@ impl TimeLapseManufacturer {
         // check if we already a "today" folder, if not create one
         if Self::get_dir_structure().today_folder.is_none() {
             let today_folder_path =
-                format!("{}/{}", MOVIES_FOLDER_ROOT, chrono::Utc::now().timestamp());
+                format!("{}/{}", MOVIES_FOLDER_ROOT, chrono::Local::now().timestamp());
             fs::create_dir_all(&today_folder_path)
                 .expect(&format!("Error creating {}", today_folder_path));
         }
@@ -285,7 +285,7 @@ impl TimeLapseManufacturer {
             let start_pic_day = match &self.picture_taking_thread {
                 None => {
                     self.start_taking_pictures(false);
-                    chrono::Utc::now().day()
+                    chrono::Local::now().day()
                 }
                 Some(t) => t.0.day(),
             };
@@ -301,7 +301,9 @@ impl TimeLapseManufacturer {
                 .expect("Pic taking thread failed to start")
                 .0
                 .day();
+
             if start_pic_day != curr_pic_taking_day {
+                info!("New day is {}, stitching last day", start_pic_day);
                 // new day, stitch last day and move it to own folder
                 self.stitch();
             }
@@ -312,7 +314,7 @@ impl TimeLapseManufacturer {
         let mut files_string = String::new();
         let structure = Self::get_dir_structure();
         if let Some(folder) = structure.today_folder {
-            for movie in folder.today_movies {
+            for movie in folder.today_movies.iter().rev() {
                 files_string.push_str(&format!("file \'{}\'\n", movie.path));
             }
 
@@ -353,7 +355,7 @@ impl TimeLapseManufacturer {
         let camera_process = self.camera.clone();
         let recording_folder = self.curr_tmp_pic_recording_folder.clone();
         let (sender, receiver) = crossbeam_channel::bounded::<PicTakingMessage>(2);
-        self.picture_taking_thread = Some((chrono::Utc::now(), receiver));
+        self.picture_taking_thread = Some((chrono::Local::now(), receiver));
         std::thread::spawn(move || {
             let local: DateTime<Local> = Local::now();
             let initial_hour = local.hour();

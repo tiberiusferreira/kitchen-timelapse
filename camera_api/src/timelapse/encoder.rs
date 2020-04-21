@@ -27,8 +27,10 @@ impl TimeLapseManufacturer {
                 .arg("1640:1232")
                 .arg("-vf")
                 .arg("fps=10")
+                .arg("-preset")
+                .arg("slow")
                 .arg("-crf")
-                .arg("33")
+                .arg("32")
                 .arg(output_path_with_filename.clone())
                 .spawn()
                 .expect("command failed to start");
