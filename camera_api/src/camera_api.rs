@@ -1,9 +1,10 @@
 use log::error;
 use std::fs;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::{Write};
 use std::process::Command;
 use std::time::Duration;
+use log::info;
 const TMP_FILE: &str = "/mnt/ram/image_latest.jpg";
 
 #[derive(Clone, Debug)]
@@ -22,6 +23,7 @@ impl Camera {
         new_camera
     }
 
+    /// This function waits 500ms for the picture to be taken
     pub fn take_new_pic(&self) -> Vec<u8> {
         let mut process = Command::new("kill")
             .arg("-USR1")
@@ -36,27 +38,36 @@ impl Camera {
             error!("Process did not finish successfully.");
             panic!();
         }
+        // time to take picture and write to disk
         std::thread::sleep(Duration::from_millis(500));
-        let curr_latest = fs::read(TMP_FILE).unwrap();
+        let curr_latest = fs::read(TMP_FILE).expect("Error reading newly taken picture from disk. Maybe needs to wait longer.");
+        fs::remove_file(TMP_FILE).expect(&format!("Error removing tmp file {}", TMP_FILE));
         curr_latest
     }
 
+    /// This function waits 500ms for the picture to be taken and saved
     pub fn take_new_pic_save_at(&self, path: &str) {
         let pic = self.take_new_pic();
         let mut f = File::create(path).expect(&format!("Could not create file at {}", path));
-        f.write_all(&pic).unwrap();
+        f.write_all(&pic).expect("Error writing picture to disk at new location");
     }
 
     fn kill_previous_rapistill_process() {
-        Command::new("killall")
+        let output = Command::new("killall")
             .arg("raspistill")
             .output()
             .expect("Could not kill previous raspistill process");
+        if output.status.success(){
+            info!("Killed previous raspistill process!");
+        }else{
+            info!("No previous raspistill process detected!");
+        }
     }
 
     fn start_raspistill_process() -> u32 {
         // sudo mount -t tmpfs -o rw,size=50M tmpfs /mnt/ramdisk
-        let mut process = Command::new("raspistill")
+        info!("Starting raspistill process");
+        let process = Command::new("raspistill")
             .arg("-q") // quality 7
             .arg("7")
             .arg("-w")
@@ -79,18 +90,7 @@ impl Camera {
             .spawn()
             .expect("raspistill process failed to start");
         let camera_process_id = process.id();
-        if let Some(out) = &mut process.stderr {
-            let mut string = String::new();
-            out.read_to_string(&mut string).unwrap();
-            error!("{}", string);
-            panic!();
-        }
-
-        if let Some(out) = &mut process.stdout {
-            let mut string = String::new();
-            out.read_to_string(&mut string).unwrap();
-            error!("{}", string);
-        }
+        info!("Process started with id: {}", camera_process_id);
         camera_process_id
     }
 }

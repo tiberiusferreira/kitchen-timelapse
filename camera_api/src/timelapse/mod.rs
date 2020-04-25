@@ -41,6 +41,7 @@ impl PicsFolders {
         format!("{}/{}", PICS_FOLDER_ROOT, self.to_string())
     }
     pub fn delete_folder(&self) {
+        info!("Deleting folder: {}", self.path());
         std::fs::remove_dir_all(self.path())
             .expect(&format!("Could not clear dir: {}", self.path()));
     }
@@ -62,6 +63,7 @@ impl PicsFolders {
     }
 
     pub fn create_folder(&self) {
+        info!("Creating dir: {}", self.path());
         fs::create_dir_all(self.path()).expect(&format!(
             "Error creating pic folder in path: {}",
             self.path()
@@ -187,6 +189,7 @@ impl TimeLapseManufacturer {
         dir_structure
     }
     pub fn new() -> Self {
+        info!("Clearing pics folder");
         Self::clear_pics_folder();
         Self {
             camera: Camera::new(),
@@ -198,6 +201,7 @@ impl TimeLapseManufacturer {
 
     fn clear_pics_folder() {
         if fs::read_dir(PICS_FOLDER_ROOT).is_ok() {
+            info!("Found previous pic dir. Removing dir: {}", PICS_FOLDER_ROOT);
             fs::remove_dir_all(PICS_FOLDER_ROOT).expect("Error removing PICS folder");
         }
         PicsFolders::A.create_folder();
@@ -211,7 +215,7 @@ impl TimeLapseManufacturer {
         let tmp_output_dir = format!("{}/{}", ENCODING_FOLDER, "today");
         if fs::read_dir(&tmp_output_dir).is_err() {
             info!("Creating new today folder at: {}", &tmp_output_dir);
-            fs::create_dir_all(&tmp_output_dir).unwrap();
+            fs::create_dir_all(&tmp_output_dir).expect(&format!("Error creating dir for encoding: {}", tmp_output_dir));
         }
 
         self.start_encoding_thread(
@@ -221,6 +225,7 @@ impl TimeLapseManufacturer {
         );
 
         // wait encoding to be over and get output path
+        info!("Waiting for encoding thread...");
         let encoding_output = match self
             .encoding_thread
             .as_mut()
@@ -235,6 +240,7 @@ impl TimeLapseManufacturer {
         if Self::get_dir_structure().today_folder.is_none() {
             let today_folder_path =
                 format!("{}/{}", MOVIES_FOLDER_ROOT, chrono::Local::now().timestamp());
+            info!("No today folder yet, creating one at {}", today_folder_path);
             fs::create_dir_all(&today_folder_path)
                 .expect(&format!("Error creating {}", today_folder_path));
         }
@@ -244,19 +250,20 @@ impl TimeLapseManufacturer {
         let dest_path_with_filename = format!("{}/{}", today_folder.path, encoding_output.filename);
 
         // move the encoded movie into today folder
+        info!("Moving the encoded file from {} to {}", encoding_output.output_path_with_filename, dest_path_with_filename);
         fs::rename(
             &encoding_output.output_path_with_filename,
             &dest_path_with_filename,
         )
-        .expect(&format!(
-            "Error moving {} to {}",
-            encoding_output.output_path_with_filename, dest_path_with_filename
-        ));
+            .expect(&format!(
+                "Error moving {} to {}",
+                encoding_output.output_path_with_filename, dest_path_with_filename
+            ));
     }
 
-    pub fn start_taking_pictures(&mut self, debugging: bool) {
+    pub fn start_taking_pictures(&mut self) {
         self.curr_tmp_pic_recording_folder.reset_folder();
-        self.start_take_pictures_till_hour_end_thread(debugging);
+        self.start_take_pictures_till_hour_end_thread();
     }
 
     pub fn wait_taking_pictures(&mut self) {
@@ -279,26 +286,32 @@ impl TimeLapseManufacturer {
     /// wait pic taking done, switch folder
     pub fn run(&mut self) {
         // Starting Pic taking
-        println!("{:?}", Self::get_dir_structure());
+        println!("{:#?}", Self::get_dir_structure());
+        info!("Removing previous encoding folder");
+        fs::remove_dir_all(ENCODING_FOLDER).expect("Error removing previous enconding folder!");
 
         loop {
             let start_pic_day = match &self.picture_taking_thread {
                 None => {
-                    self.start_taking_pictures(false);
+                    self.start_taking_pictures();
                     chrono::Local::now().day()
                 }
                 Some(t) => t.0.day(),
             };
+            info!("Waiting pic taking to finish.");
             self.wait_taking_pictures();
+            info!("Pic taking done!");
+            info!("Switching pic taking folder!");
             self.curr_tmp_pic_recording_folder.switch_folders();
-
-            self.start_taking_pictures(false);
-
+            info!("New pic taking folder: {}", self.curr_tmp_pic_recording_folder.path());
+            info!("Starting new pic taking thread!");
+            self.start_taking_pictures();
+            info!("Encoding last hour!");
             self.encode_last_hour_and_move_to_today_folder();
             let curr_pic_taking_day = self
                 .picture_taking_thread
                 .as_ref()
-                .expect("Pic taking thread failed to start")
+                .expect("No Pic taking thread active after starting it!")
                 .0
                 .day();
 
@@ -311,6 +324,7 @@ impl TimeLapseManufacturer {
     }
 
     fn stitch(&mut self) {
+        info!("Started stitching!");
         let mut files_string = String::new();
         let structure = Self::get_dir_structure();
         if let Some(folder) = structure.today_folder {
@@ -322,6 +336,7 @@ impl TimeLapseManufacturer {
             file.write_all(files_string.as_bytes()).unwrap();
             // ffmpeg -f concat -safe 0 -i files.txt -c copy some.mp4
             let out_path = format!("{}/{}.mp4", ENCODING_FOLDER, folder.timestamp);
+            info!("Outputting stitched result to {}!", out_path);
             let process = Command::new("ffmpeg")
                 .stdout(Stdio::piped())
                 .arg("-f")
@@ -345,22 +360,32 @@ impl TimeLapseManufacturer {
                 error!("{}", err);
                 error!("{}", out);
             }
+            info!("Stitching done!");
+            info!("Removing previous today folder!");
             fs::remove_dir_all(&folder.path).expect("Error removing today folder");
-            fs::rename(&out_path, format!("{}.mp4", &folder.path))
+            let dest = format!("{}.mp4", &folder.path);
+            info!("Moving result from {} to {}.", out_path, dest);
+            fs::rename(&out_path, dest)
                 .expect(&format!("Error moving {} to {}", out_path, folder.path));
         }
     }
 
-    fn start_take_pictures_till_hour_end_thread(&mut self, debugging: bool) -> JoinHandle<()> {
+    fn start_take_pictures_till_hour_end_thread(&mut self) -> JoinHandle<()> {
         let camera_process = self.camera.clone();
         let recording_folder = self.curr_tmp_pic_recording_folder.clone();
         let (sender, receiver) = crossbeam_channel::bounded::<PicTakingMessage>(2);
+        info!("Starting new pic taking!");
+        if self.picture_taking_thread.is_some(){
+            panic!("Tried to start a new picture_taking_thread with one already existing!");
+        }
         self.picture_taking_thread = Some((chrono::Local::now(), receiver));
         std::thread::spawn(move || {
             let local: DateTime<Local> = Local::now();
             let initial_hour = local.hour();
+            info!("Pic taking thread started, taking pics for hour: {}", initial_hour);
             let mut i = 0;
-            while Local::now().hour() == initial_hour {
+            // take pictures until the current hour expires or at least 5 pictures
+            while (Local::now().hour() == initial_hour) || i < 5 {
                 let path = format!(
                     "{}/{}/{:05}.jpg",
                     PICS_FOLDER_ROOT,
@@ -369,14 +394,8 @@ impl TimeLapseManufacturer {
                 );
                 camera_process.take_new_pic_save_at(&path);
                 i += 1;
-                // std::thread::sleep(Duration::from_secs_f32(0.5));
-
-                if debugging {
-                    if i == 20 {
-                        break;
-                    }
-                }
             }
+            info!("Pic taking thread done!");
             sender.send(PicTakingMessage::Done).unwrap();
         })
     }

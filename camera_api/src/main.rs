@@ -4,6 +4,8 @@
 #![feature(proc_macro_hygiene)]
 extern crate rocket;
 
+use flexi_logger::{Criterion, Naming, Cleanup};
+
 mod camera_api;
 
 
@@ -16,15 +18,15 @@ mod timelapse;
 
 fn main() {
     use flexi_logger::colored_opt_format;
+    use log::info;
     flexi_logger::Logger::with_str("info")
         .format(colored_opt_format)
         .log_to_file()
         .directory("./logs")
+        .rotate(Criterion::Size(500_000), Naming::Numbers, Cleanup::KeepLogFiles(2))
         .start()
         .unwrap();
-    // let camera = camera_api::Camera::new();
-    // let pic = camera.take_new_pic();
-    let mut k = timelapse::TimeLapseManufacturer::new();
-    k.run();
-    // rocket::ignite().mount("/", routes![stream]).launch();
+    info!("Starting up...");
+    let mut timelapse_manufacturer = timelapse::TimeLapseManufacturer::new();
+    timelapse_manufacturer.run();
 }

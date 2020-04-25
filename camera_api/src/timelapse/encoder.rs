@@ -1,6 +1,6 @@
 use crate::timelapse::{EncodingMessage, EncodingOutput, TimeLapseManufacturer};
 use std::process::{Command};
-
+use log::info;
 impl TimeLapseManufacturer {
     // fn state(&self) -> EncoderState {
     //     self.state.clone()
@@ -12,6 +12,7 @@ impl TimeLapseManufacturer {
         output_path_with_filename: String,
         filename: String,
     ) {
+        info!("Starting encoding thread");
         let (sender, receiver) = crossbeam_channel::bounded::<EncodingMessage>(2);
         self.encoding_thread = Some(receiver);
         std::thread::spawn(move || {
@@ -34,11 +35,13 @@ impl TimeLapseManufacturer {
                 .arg(output_path_with_filename.clone())
                 .spawn()
                 .expect("command failed to start");
-            process.wait().unwrap();
+            info!("Started encoding process!");
+            process.wait().expect("Error while waiting for encoding process!");
             let encoding_output = EncodingOutput {
                 output_path_with_filename,
                 filename,
             };
+            info!("Encoding thread done!");
             sender.send(EncodingMessage::Done(encoding_output))
         });
     }
