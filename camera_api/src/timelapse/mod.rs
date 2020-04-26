@@ -120,15 +120,19 @@ pub struct DirStructure {
 }
 
 impl TimeLapseManufacturer {
+    /// All the files in MOVIES_FOLDER_ROOT should either be a folder (maximum of one folder, the today folder)
+    /// with its name being a timestamp or a file, with its name being a timestamp and extension .mp4
+    /// The folder should also contain files with extension .mp4 and named a timestamp number.
     pub fn get_dir_structure() -> DirStructure {
         let mut dir_structure: DirStructure = DirStructure {
             movies: vec![],
             today_folder: None,
         };
         if fs::read_dir(MOVIES_FOLDER_ROOT).is_err() {
-            fs::create_dir_all(MOVIES_FOLDER_ROOT).unwrap();
+            info!("Movies root folder not found, creating one.");
+            fs::create_dir_all(MOVIES_FOLDER_ROOT).expect("Error creating movies folder root dir");
         }
-        let dir = fs::read_dir(MOVIES_FOLDER_ROOT).expect("Error movies folder dir");
+        let dir = fs::read_dir(MOVIES_FOLDER_ROOT).expect("Error creating movies folder dir");
         for entry in dir {
             let entry = entry.expect("Error reading entry from movies folder dir");
             let metadata = entry.metadata().expect("No metadata for entry!");
@@ -151,7 +155,7 @@ impl TimeLapseManufacturer {
                 let timestamp = filename.to_string_lossy();
                 if let Ok(timestamp) = timestamp.parse::<i64>() {
                     let datetime = chrono::NaiveDateTime::from_timestamp(timestamp, 0);
-                    assert!(dir_structure.today_folder.is_none(), "two today folders!");
+                    assert!(dir_structure.today_folder.is_none(), "Two today folders found!");
                     dir_structure.today_folder = Some(TodayFolder {
                         timestamp,
                         datetime,
