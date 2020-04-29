@@ -10,7 +10,7 @@ use rocket_contrib::json::Json;
 use rocket_cors::{AllowedOrigins, AllowedHeaders};
 
 
-const MOVIES_FOLDER_ROOT: &str = "movies";
+const MOVIES_FOLDER_ROOT: &str = "/mnt/skynet/movies";
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]
 pub struct TodayMovie {
@@ -22,7 +22,7 @@ pub struct TodayMovie {
 impl TodayMovie{
     pub fn new(folder_name: &str, filename: &str) -> Self {
         let date = filename_to_date(filename);
-        let formatted = format!("Hoje às {}h", date.hour());
+        let formatted = format!("{}h", date.hour());
         TodayMovie{
             hour: date.hour(),
             filepath: format!("{}/{}", folder_name, filename),
@@ -52,7 +52,7 @@ pub fn filename_to_date(filename: &str) -> DateTime<Local>{
 impl PastDayMovies {
     pub fn new(filename: &str) -> Self {
         let date = filename_to_date(filename);
-        let formatted = format!("{}-{}-{}", date.day0(), date.month0(), date.year());
+        let formatted = format!("{}-{}-{}", date.day(), date.month(), date.year());
 
         Self {
             formatted_date: formatted,
