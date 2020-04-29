@@ -2,4 +2,5 @@
 
 members = [
     "camera_api",
+    "video_streaming_api"
 ]

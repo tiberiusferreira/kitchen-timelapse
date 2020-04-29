@@ -1,11 +1,7 @@
 use crate::timelapse::{EncodingMessage, EncodingOutput, TimeLapseManufacturer};
-use std::process::{Command};
 use log::info;
+use std::process::Command;
 impl TimeLapseManufacturer {
-    // fn state(&self) -> EncoderState {
-    //     self.state.clone()
-    // }
-
     pub fn start_encoding_thread(
         &mut self,
         img_dir: String,
@@ -36,7 +32,9 @@ impl TimeLapseManufacturer {
                 .spawn()
                 .expect("command failed to start");
             info!("Started encoding process!");
-            process.wait().expect("Error while waiting for encoding process!");
+            process
+                .wait()
+                .expect("Error while waiting for encoding process!");
             let encoding_output = EncodingOutput {
                 output_path_with_filename,
                 filename,

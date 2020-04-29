@@ -1,10 +1,10 @@
 use log::error;
+use log::info;
 use std::fs;
 use std::fs::File;
-use std::io::{Write};
+use std::io::Write;
 use std::process::Command;
 use std::time::Duration;
-use log::info;
 const TMP_FILE: &str = "/mnt/ram/image_latest.jpg";
 
 #[derive(Clone, Debug)]
@@ -40,7 +40,8 @@ impl Camera {
         }
         // time to take picture and write to disk
         std::thread::sleep(Duration::from_millis(500));
-        let curr_latest = fs::read(TMP_FILE).expect("Error reading newly taken picture from disk. Maybe needs to wait longer.");
+        let curr_latest = fs::read(TMP_FILE)
+            .expect("Error reading newly taken picture from disk. Maybe needs to wait longer.");
         fs::remove_file(TMP_FILE).expect(&format!("Error removing tmp file {}", TMP_FILE));
         curr_latest
     }
@@ -49,7 +50,8 @@ impl Camera {
     pub fn take_new_pic_save_at(&self, path: &str) {
         let pic = self.take_new_pic();
         let mut f = File::create(path).expect(&format!("Could not create file at {}", path));
-        f.write_all(&pic).expect("Error writing picture to disk at new location");
+        f.write_all(&pic)
+            .expect("Error writing picture to disk at new location");
     }
 
     fn kill_previous_rapistill_process() {
@@ -57,9 +59,9 @@ impl Camera {
             .arg("raspistill")
             .output()
             .expect("Could not kill previous raspistill process");
-        if output.status.success(){
+        if output.status.success() {
             info!("Killed previous raspistill process!");
-        }else{
+        } else {
             info!("No previous raspistill process detected!");
         }
     }

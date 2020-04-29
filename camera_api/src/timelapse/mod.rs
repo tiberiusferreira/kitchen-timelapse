@@ -1,11 +1,14 @@
 use crate::camera_api::Camera;
 use chrono::prelude::*;
-use crossbeam_channel::{Receiver};
+use crossbeam_channel::Receiver;
 use log::{error, info};
 use std::fs;
 use std::io::Write;
 use std::process::{Command, Stdio};
 use std::thread::JoinHandle;
+use std::ops::Sub;
+use chrono::Duration;
+
 mod encoder;
 
 const PICS_FOLDER_ROOT: &str = "/mnt/skynet/pics";
@@ -51,14 +54,10 @@ impl PicsFolders {
         self.create_folder();
     }
 
-    pub fn get_other_one(&self) -> PicsFolders{
+    pub fn get_other_one(&self) -> PicsFolders {
         return match &self {
-            PicsFolders::A => {
-                PicsFolders::B
-            }
-            PicsFolders::B => {
-                PicsFolders::A
-            }
+            PicsFolders::A => PicsFolders::B,
+            PicsFolders::B => PicsFolders::A,
         };
     }
 
@@ -155,7 +154,10 @@ impl TimeLapseManufacturer {
                 let timestamp = filename.to_string_lossy();
                 if let Ok(timestamp) = timestamp.parse::<i64>() {
                     let datetime = chrono::NaiveDateTime::from_timestamp(timestamp, 0);
-                    assert!(dir_structure.today_folder.is_none(), "Two today folders found!");
+                    assert!(
+                        dir_structure.today_folder.is_none(),
+                        "Two today folders found!"
+                    );
                     dir_structure.today_folder = Some(TodayFolder {
                         timestamp,
                         datetime,
@@ -212,18 +214,24 @@ impl TimeLapseManufacturer {
         PicsFolders::B.create_folder();
     }
 
-
     pub fn encode_last_hour_and_move_to_today_folder(&mut self) {
         // start encoding the pics just taken
-        let encoded_movie_filename = format!("{}.mp4", chrono::Local::now().timestamp());
+        let last_hour_timestamp = Local::now().sub(Duration::minutes(30)).timestamp();
+        let encoded_movie_filename = format!("{}.mp4", last_hour_timestamp);
         let tmp_output_dir = format!("{}/{}", ENCODING_FOLDER, "today");
         if fs::read_dir(&tmp_output_dir).is_err() {
             info!("Creating new today folder at: {}", &tmp_output_dir);
-            fs::create_dir_all(&tmp_output_dir).expect(&format!("Error creating dir for encoding: {}", tmp_output_dir));
+            fs::create_dir_all(&tmp_output_dir).expect(&format!(
+                "Error creating dir for encoding: {}",
+                tmp_output_dir
+            ));
         }
 
         self.start_encoding_thread(
-            format!("{}", self.curr_tmp_pic_recording_folder.get_other_one().path()),
+            format!(
+                "{}",
+                self.curr_tmp_pic_recording_folder.get_other_one().path()
+            ),
             format!("{}/{}", tmp_output_dir, encoded_movie_filename),
             encoded_movie_filename.to_string(),
         );
@@ -242,8 +250,11 @@ impl TimeLapseManufacturer {
 
         // check if we already a "today" folder, if not create one
         if Self::get_dir_structure().today_folder.is_none() {
-            let today_folder_path =
-                format!("{}/{}", MOVIES_FOLDER_ROOT, chrono::Local::now().timestamp());
+            let today_folder_path = format!(
+                "{}/{}",
+                MOVIES_FOLDER_ROOT,
+                chrono::Local::now().timestamp()
+            );
             info!("No today folder yet, creating one at {}", today_folder_path);
             fs::create_dir_all(&today_folder_path)
                 .expect(&format!("Error creating {}", today_folder_path));
@@ -254,15 +265,18 @@ impl TimeLapseManufacturer {
         let dest_path_with_filename = format!("{}/{}", today_folder.path, encoding_output.filename);
 
         // move the encoded movie into today folder
-        info!("Moving the encoded file from {} to {}", encoding_output.output_path_with_filename, dest_path_with_filename);
+        info!(
+            "Moving the encoded file from {} to {}",
+            encoding_output.output_path_with_filename, dest_path_with_filename
+        );
         fs::rename(
             &encoding_output.output_path_with_filename,
             &dest_path_with_filename,
         )
-            .expect(&format!(
-                "Error moving {} to {}",
-                encoding_output.output_path_with_filename, dest_path_with_filename
-            ));
+        .expect(&format!(
+            "Error moving {} to {}",
+            encoding_output.output_path_with_filename, dest_path_with_filename
+        ));
     }
 
     pub fn start_taking_pictures(&mut self) {
@@ -307,7 +321,10 @@ impl TimeLapseManufacturer {
             info!("Pic taking done!");
             info!("Switching pic taking folder!");
             self.curr_tmp_pic_recording_folder.switch_folders();
-            info!("New pic taking folder: {}", self.curr_tmp_pic_recording_folder.path());
+            info!(
+                "New pic taking folder: {}",
+                self.curr_tmp_pic_recording_folder.path()
+            );
             info!("Starting new pic taking thread!");
             self.start_taking_pictures();
             info!("Encoding last hour!");
@@ -379,14 +396,17 @@ impl TimeLapseManufacturer {
         let recording_folder = self.curr_tmp_pic_recording_folder.clone();
         let (sender, receiver) = crossbeam_channel::bounded::<PicTakingMessage>(2);
         info!("Starting new pic taking!");
-        if self.picture_taking_thread.is_some(){
+        if self.picture_taking_thread.is_some() {
             panic!("Tried to start a new picture_taking_thread with one already existing!");
         }
         self.picture_taking_thread = Some((chrono::Local::now(), receiver));
         std::thread::spawn(move || {
             let local: DateTime<Local> = Local::now();
             let initial_hour = local.hour();
-            info!("Pic taking thread started, taking pics for hour: {}", initial_hour);
+            info!(
+                "Pic taking thread started, taking pics for hour: {}",
+                initial_hour
+            );
             let mut i = 0;
             // take pictures until the current hour expires or at least 5 pictures
             while (Local::now().hour() == initial_hour) || i < 5 {
