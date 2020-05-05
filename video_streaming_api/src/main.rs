@@ -8,6 +8,7 @@ use chrono::{DateTime, TimeZone, Timelike, Datelike, Local};
 use serde::{Serialize, Deserialize};
 use rocket_contrib::json::Json;
 use rocket_cors::{AllowedOrigins, AllowedHeaders};
+use flexi_logger::{Cleanup, Criterion, Naming};
 
 
 const MOVIES_FOLDER_ROOT: &str = "/mnt/skynet/movies";
@@ -119,6 +120,22 @@ fn main() {
     let allowed_origins = AllowedOrigins::All;
     use rocket::http::Method;
 
+    use flexi_logger::colored_opt_format;
+    use log::info;
+    flexi_logger::Logger::with_str("info")
+        .format(colored_opt_format)
+        .log_to_file()
+        .directory("./logs")
+        .rotate(
+            Criterion::Size(500_000),
+            Naming::Numbers,
+            Cleanup::KeepLogFiles(1),
+        )
+        .start()
+        .unwrap();
+    log_panics::init();
+    info!("Starting up...");
+
     let cors = rocket_cors::CorsOptions {
         allowed_origins,
         allowed_methods: vec![Method::Get].into_iter().map(From::from).collect(),
@@ -127,6 +144,8 @@ fn main() {
         ..Default::default()
     }
         .to_cors().unwrap();
+
+
 
     rocket::ignite().attach(cors).mount("/", routes![stream, movies, stream_today]).launch();
 }

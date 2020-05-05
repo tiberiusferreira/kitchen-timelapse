@@ -45,8 +45,10 @@ impl PicsFolders {
     }
     pub fn delete_folder(&self) {
         info!("Deleting folder: {}", self.path());
-        std::fs::remove_dir_all(self.path())
-            .expect(&format!("Could not clear dir: {}", self.path()));
+        if std::fs::read_dir(self.path()).is_ok(){
+            std::fs::remove_dir_all(self.path())
+                .expect(&format!("Could not clear dir: {}", self.path()));
+        }
     }
 
     pub fn reset_folder(&self) {
@@ -214,9 +216,11 @@ impl TimeLapseManufacturer {
         PicsFolders::B.create_folder();
     }
 
-    pub fn encode_last_hour_and_move_to_today_folder(&mut self) {
+    pub fn encode_last_hour_and_move_to_today_folder_clean_pic_folder(&mut self) {
         // start encoding the pics just taken
         let last_hour_timestamp = Local::now().sub(Duration::minutes(30)).timestamp();
+        // get the folder not currently active, the one which just finished being filled with photos
+        let pics_folder = self.curr_tmp_pic_recording_folder.get_other_one();
         let encoded_movie_filename = format!("{}.mp4", last_hour_timestamp);
         let tmp_output_dir = format!("{}/{}", ENCODING_FOLDER, "today");
         if fs::read_dir(&tmp_output_dir).is_err() {
@@ -230,7 +234,7 @@ impl TimeLapseManufacturer {
         self.start_encoding_thread(
             format!(
                 "{}",
-                self.curr_tmp_pic_recording_folder.get_other_one().path()
+                pics_folder.path()
             ),
             format!("{}/{}", tmp_output_dir, encoded_movie_filename),
             encoded_movie_filename.to_string(),
@@ -247,7 +251,8 @@ impl TimeLapseManufacturer {
         {
             EncodingMessage::Done(output_path) => output_path,
         };
-
+        info!("Enconding of last hour done! Deleting pics from folder.");
+        pics_folder.reset_folder();
         // check if we already a "today" folder, if not create one
         if Self::get_dir_structure().today_folder.is_none() {
             let today_folder_path = format!(
@@ -305,9 +310,10 @@ impl TimeLapseManufacturer {
     pub fn run(&mut self) {
         // Starting Pic taking
         println!("{:#?}", Self::get_dir_structure());
-        info!("Removing previous encoding folder");
-        fs::remove_dir_all(ENCODING_FOLDER).expect("Error removing previous enconding folder!");
-
+        if fs::read_dir(ENCODING_FOLDER).is_ok(){
+            info!("Encoding folder found! Removing previous encoding folder");
+            fs::remove_dir_all(ENCODING_FOLDER).expect("Error removing previous enconding folder!");
+        }
         loop {
             let start_pic_day = match &self.picture_taking_thread {
                 None => {
@@ -328,7 +334,7 @@ impl TimeLapseManufacturer {
             info!("Starting new pic taking thread!");
             self.start_taking_pictures();
             info!("Encoding last hour!");
-            self.encode_last_hour_and_move_to_today_folder();
+            self.encode_last_hour_and_move_to_today_folder_clean_pic_folder();
             let curr_pic_taking_day = self
                 .picture_taking_thread
                 .as_ref()

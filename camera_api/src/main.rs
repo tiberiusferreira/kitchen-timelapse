@@ -15,10 +15,11 @@ fn main() {
         .rotate(
             Criterion::Size(500_000),
             Naming::Numbers,
-            Cleanup::KeepLogFiles(2),
+            Cleanup::KeepLogFiles(1),
         )
         .start()
         .unwrap();
+    log_panics::init();
     info!("Starting up...");
     let mut timelapse_manufacturer = timelapse::TimeLapseManufacturer::new();
     timelapse_manufacturer.run();
