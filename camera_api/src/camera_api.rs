@@ -48,7 +48,7 @@ impl Camera {
                     return curr_latest;
                 }
                 Err(e) => {
-                    error!(e);
+                    error!("{}", e);
                 }
             }
         }
