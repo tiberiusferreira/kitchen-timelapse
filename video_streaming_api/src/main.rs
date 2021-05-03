@@ -2,14 +2,13 @@
 #![feature(proc_macro_hygiene)]
 #[macro_use]
 extern crate rocket;
-use rocket_seek_stream::SeekStream;
-use std::fs;
-use chrono::{DateTime, TimeZone, Timelike, Datelike, Local};
-use serde::{Serialize, Deserialize};
-use rocket_contrib::json::Json;
-use rocket_cors::{AllowedOrigins, AllowedHeaders};
+use chrono::{DateTime, Datelike, Local, TimeZone, Timelike};
 use flexi_logger::{Cleanup, Criterion, Naming};
-
+use rocket_contrib::json::Json;
+use rocket_cors::{AllowedHeaders, AllowedOrigins};
+use rocket_seek_stream::SeekStream;
+use serde::{Deserialize, Serialize};
+use std::fs;
 
 const MOVIES_FOLDER_ROOT: &str = "/mnt/skynet/movies";
 
@@ -20,14 +19,14 @@ pub struct TodayMovie {
     formatted_date: String,
 }
 
-impl TodayMovie{
+impl TodayMovie {
     pub fn new(folder_name: &str, filename: &str) -> Self {
         let date = filename_to_date(filename);
         let formatted = format!("{}h", date.hour());
-        TodayMovie{
+        TodayMovie {
             hour: date.hour(),
             filepath: format!("{}/{}", folder_name, filename),
-            formatted_date: formatted
+            formatted_date: formatted,
         }
     }
 }
@@ -39,7 +38,7 @@ pub struct PastDayMovies {
     filename: String,
 }
 
-pub fn filename_to_date(filename: &str) -> DateTime<Local>{
+pub fn filename_to_date(filename: &str) -> DateTime<Local> {
     assert!(
         filename.ends_with(".mp4"),
         format!("File does not end with .mp4: {}", filename)
@@ -83,12 +82,13 @@ pub fn dir_curr_files() -> AvailableMovies {
             let movie = PastDayMovies::new(&filename);
             available_movies.past_day_movies.push(movie);
         }
-        if file_type.is_dir(){
-            let entries =
-                fs::read_dir(entry.path()).expect("Error reading today_movies folder");
+        if file_type.is_dir() {
+            let entries = fs::read_dir(entry.path()).expect("Error reading today_movies folder");
             for folder_entry in entries {
                 let folder_entry = folder_entry.expect("Error reading entry in today folder");
-                let file_type = folder_entry.file_type().expect("Error reading folder entry in today folder");
+                let file_type = folder_entry
+                    .file_type()
+                    .expect("Error reading folder entry in today folder");
                 let is_mp4 = folder_entry.file_name().to_string_lossy().ends_with(".mp4");
                 let today_movie_filename = folder_entry.file_name().to_string_lossy().to_string();
                 if file_type.is_file() && is_mp4 {
@@ -107,8 +107,14 @@ fn stream<'a>(movie_path: String) -> std::io::Result<SeekStream<'a>> {
 }
 
 #[get("/stream/<today_folder>/<today_filename>")]
-fn stream_today<'a>(today_folder: String, today_filename: String) -> std::io::Result<SeekStream<'a>> {
-    SeekStream::from_path(format!("{}/{}/{}", MOVIES_FOLDER_ROOT, today_folder, today_filename))
+fn stream_today<'a>(
+    today_folder: String,
+    today_filename: String,
+) -> std::io::Result<SeekStream<'a>> {
+    SeekStream::from_path(format!(
+        "{}/{}/{}",
+        MOVIES_FOLDER_ROOT, today_folder, today_filename
+    ))
 }
 
 #[get("/movies")]
@@ -143,9 +149,11 @@ fn main() {
         allow_credentials: true,
         ..Default::default()
     }
-        .to_cors().unwrap();
+    .to_cors()
+    .unwrap();
 
-
-
-    rocket::ignite().attach(cors).mount("/", routes![stream, movies, stream_today]).launch();
+    rocket::ignite()
+        .attach(cors)
+        .mount("/", routes![stream, movies, stream_today])
+        .launch();
 }

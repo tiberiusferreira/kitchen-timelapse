@@ -2,7 +2,7 @@ use log::error;
 use log::info;
 use std::fs;
 use std::fs::File;
-use std::io::{Write, Error};
+use std::io::Write;
 use std::process::Command;
 use std::time::Duration;
 
@@ -39,12 +39,13 @@ impl Camera {
             error!("Process did not finish successfully.");
             panic!();
         }
-        for i in 0..=9{
+        for _i in 0..=9 {
             // time to take picture and write to disk
             std::thread::sleep(Duration::from_millis(500));
-            match fs::read(TMP_FILE){
+            match fs::read(TMP_FILE) {
                 Ok(curr_latest) => {
-                    fs::remove_file(TMP_FILE).expect(&format!("Error removing tmp file {}", TMP_FILE));
+                    fs::remove_file(TMP_FILE)
+                        .expect(&format!("Error removing tmp file {}", TMP_FILE));
                     return curr_latest;
                 }
                 Err(e) => {

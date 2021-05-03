@@ -1,13 +1,13 @@
 use crate::camera_api::Camera;
 use chrono::prelude::*;
+use chrono::Duration;
 use crossbeam_channel::Receiver;
 use log::{error, info};
 use std::fs;
 use std::io::Write;
+use std::ops::Sub;
 use std::process::{Command, Stdio};
 use std::thread::JoinHandle;
-use std::ops::Sub;
-use chrono::Duration;
 
 mod encoder;
 
@@ -45,7 +45,7 @@ impl PicsFolders {
     }
     pub fn delete_folder(&self) {
         info!("Deleting folder: {}", self.path());
-        if std::fs::read_dir(self.path()).is_ok(){
+        if std::fs::read_dir(self.path()).is_ok() {
             std::fs::remove_dir_all(self.path())
                 .expect(&format!("Could not clear dir: {}", self.path()));
         }
@@ -232,10 +232,7 @@ impl TimeLapseManufacturer {
         }
 
         self.start_encoding_thread(
-            format!(
-                "{}",
-                pics_folder.path()
-            ),
+            format!("{}", pics_folder.path()),
             format!("{}/{}", tmp_output_dir, encoded_movie_filename),
             encoded_movie_filename.to_string(),
         );
@@ -310,7 +307,7 @@ impl TimeLapseManufacturer {
     pub fn run(&mut self) {
         // Starting Pic taking
         println!("{:#?}", Self::get_dir_structure());
-        if fs::read_dir(ENCODING_FOLDER).is_ok(){
+        if fs::read_dir(ENCODING_FOLDER).is_ok() {
             info!("Encoding folder found! Removing previous encoding folder");
             fs::remove_dir_all(ENCODING_FOLDER).expect("Error removing previous enconding folder!");
         }
