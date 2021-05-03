@@ -52,8 +52,7 @@ impl Camera {
                 }
             }
         }
-        panic!("Failed three time to take ")
-
+        panic!("Failed multiple times to read picture");
     }
 
     /// This function waits 500ms for the picture to be taken and saved
