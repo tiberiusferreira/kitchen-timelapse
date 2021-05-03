@@ -41,7 +41,8 @@ pub struct PastDayMovies {
 pub fn filename_to_date(filename: &str) -> DateTime<Local> {
     assert!(
         filename.ends_with(".mp4"),
-        format!("File does not end with .mp4: {}", filename)
+        "File does not end with .mp4: {}",
+        filename
     );
     let timestamp: u64 = filename
         .replace(".mp4", "")

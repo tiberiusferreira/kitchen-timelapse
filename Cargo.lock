@@ -1199,7 +1199,7 @@ dependencies = [
 [[package]]
 name = "rocket_seek_stream"
 version = "0.2.3"
-source = "git+https://github.com/rydz/rocket_seek_stream#e339305ec0db5d5bdc59f373a40ea4c57ef90630"
+source = "git+https://github.com/tiberiusferreira/rocket_seek_stream.git#50be0abda391ef4ec3e3396f0dfd29f812445148"
 dependencies = [
  "rand 0.7.3",
  "range_header",
