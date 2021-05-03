@@ -16,7 +16,7 @@ case "$1" in
   start)
     echo "Starting Timelapse Recording"
     # run application you want to start
-    sleep 30 &&\
+    sleep 60 &&\
      cd /home/pi/kitchen-timelapse && (sudo -u pi env RUST_BACKTRACE=1 /home/pi/.cargo/bin/cargo run --bin camera_api --release &
 	 sudo -u pi env RUST_BACKTRACE=1 /home/pi/.cargo/bin/cargo run --bin video_streaming_api --release  &)
     ;;

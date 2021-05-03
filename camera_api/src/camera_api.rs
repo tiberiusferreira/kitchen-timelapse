@@ -2,9 +2,10 @@ use log::error;
 use log::info;
 use std::fs;
 use std::fs::File;
-use std::io::Write;
+use std::io::{Write, Error};
 use std::process::Command;
 use std::time::Duration;
+
 const TMP_FILE: &str = "/mnt/ram/image_latest.jpg";
 
 #[derive(Clone, Debug)]
@@ -38,12 +39,21 @@ impl Camera {
             error!("Process did not finish successfully.");
             panic!();
         }
-        // time to take picture and write to disk
-        std::thread::sleep(Duration::from_millis(500));
-        let curr_latest = fs::read(TMP_FILE)
-            .expect("Error reading newly taken picture from disk. Maybe needs to wait longer.");
-        fs::remove_file(TMP_FILE).expect(&format!("Error removing tmp file {}", TMP_FILE));
-        curr_latest
+        for i in 0..=9{
+            // time to take picture and write to disk
+            std::thread::sleep(Duration::from_millis(500));
+            match fs::read(TMP_FILE){
+                Ok(curr_latest) => {
+                    fs::remove_file(TMP_FILE).expect(&format!("Error removing tmp file {}", TMP_FILE));
+                    return curr_latest;
+                }
+                Err(e) => {
+                    error!(e);
+                }
+            }
+        }
+        panic!("Failed three time to take ")
+
     }
 
     /// This function waits 500ms for the picture to be taken and saved

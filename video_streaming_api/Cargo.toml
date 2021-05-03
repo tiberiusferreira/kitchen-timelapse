@@ -7,16 +7,16 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rocket = {version = "0.4.2", default-features = false}
+rocket = {version = "0.4.7", default-features = false}
 rocket_seek_stream = {git="https://github.com/rydz/rocket_seek_stream"}
 chrono = "0.4.11"
 log-panics = "2.0.0"
-serde = {version = "1.0.106", features = ["derive"]}
-serde_json = "1.0.52"
-rocket_cors = "0.5.1"
-log = "0.4.8"
-flexi_logger = "0.15.1"
+serde = {version = "1", features = ["derive"]}
+serde_json = "1"
+rocket_cors = "0.5"
+log = "0.4.14"
+flexi_logger = "0.17.1"
 [dependencies.rocket_contrib]
-version = "0.4.4"
+version = "0.4.7"
 default-features = false
 features = ["json"]

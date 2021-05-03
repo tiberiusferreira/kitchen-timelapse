@@ -314,6 +314,8 @@ impl TimeLapseManufacturer {
             info!("Encoding folder found! Removing previous encoding folder");
             fs::remove_dir_all(ENCODING_FOLDER).expect("Error removing previous enconding folder!");
         }
+        PicsFolders::A.delete_folder();
+        PicsFolders::B.delete_folder();
         loop {
             let start_pic_day = match &self.picture_taking_thread {
                 None => {
