@@ -354,7 +354,9 @@ impl TimeLapseManufacturer {
         let mut files_string = String::new();
         let structure = Self::get_dir_structure();
         if let Some(folder) = structure.today_folder {
-            for movie in folder.today_movies.iter().rev() {
+            let mut movies = folder.today_movies;
+            movies.sort_by_key(|m| m.timestamp);
+            for movie in &movies {
                 files_string.push_str(&format!("file \'{}\'\n", movie.path));
             }
 
